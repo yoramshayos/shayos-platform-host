@@ -5,13 +5,11 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "shayos-platform-host-source-0.5.0.tar.gz"
-      - ".github/workflows/android-apk.yml"
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -31,33 +29,37 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Extract ShayOS Platform Host
+      - name: Locate source archive
+        id: archive
         shell: bash
         run: |
           ARCHIVE=$(find . -name "shayos-platform-host-source-*.tar*.gz" -type f | head -1)
+
           if [ -z "$ARCHIVE" ]; then
-            echo "Archive not found"
-            echo "Repository contents:"
-            find . -maxdepth 4 -type f | sort
+            echo "Source archive not found"
+            find . -maxdepth 3 -type f | sort
             exit 1
           fi
 
-          echo "Found archive: $ARCHIVE"
+          echo "Archive: $ARCHIVE"
+          echo "path=$ARCHIVE" >> "$GITHUB_OUTPUT"
 
+      - name: Extract source
+        shell: bash
+        run: |
+          rm -rf build
           mkdir -p build
-          tar -xzf "$ARCHIVE" -C build
+          tar -xzf "${{ steps.archive.outputs.path }}" -C build
+          find build -maxdepth 3 -type f | sort | head -200
 
-          echo "Extracted contents:"
-          find build -maxdepth 4 -type f | sort | head -200
-
-      - name: Locate project directory
+      - name: Locate project
         id: project
         shell: bash
         run: |
           PACKAGE_JSON=$(find build -name package.json -type f | head -1)
 
           if [ -z "$PACKAGE_JSON" ]; then
-            echo "package.json not found after extraction"
+            echo "package.json not found"
             exit 1
           fi
 
@@ -66,32 +68,49 @@ jobs:
           echo "Project directory: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Install npm dependencies
+      - name: Install dependencies
         working-directory: ${{ steps.project.outputs.dir }}
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Verify source
         working-directory: ${{ steps.project.outputs.dir }}
         run: npm run verify
 
-      - name: Configure FOCUS profile
+      - name: Prepare Android project
         working-directory: ${{ steps.project.outputs.dir }}
-        run: npm run profile:focus
+        run: npm run android:prepare
 
-      - name: Add Android platform
+      - name: Make Gradle executable
+        working-directory: ${{ steps.project.outputs.dir }}/android
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        working-directory: ${{ steps.project.outputs.dir }}/android
+        run: ./gradlew assembleDebug
+
+      - name: Prepare APK artifact
         working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
         run: |
-          if [ ! -d android ]; then
-            npx cap add android
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "APK not found"
+            find android/app/build/outputs -type f | sort || true
+            exit 1
           fi
 
-      - name: Configure Android native project
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: npm run native:android
+          mkdir -p release
+          cp "$APK" release/ShayOS-FOCUS-0.5.0-debug.apk
+          ls -lh release/ShayOS-FOCUS-0.5.0-debug.apk
 
-      - name: Sync Capacitor Android
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: npx cap sync android
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: shayos-focus-android-apk
+          path: ${{ steps.project.outputs.dir }}/release/ShayOS-FOCUS-0.5.0-debug.apk
+          if-no-files-found: error
+          retention-days: 14        run: npx cap sync android
 
       - name: Make Gradle executable
         working-directory: ${{ steps.project.outputs.dir }}/android
