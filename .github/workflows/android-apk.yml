@@ -110,36 +110,4 @@ jobs:
           name: shayos-focus-android-apk
           path: ${{ steps.project.outputs.dir }}/release/ShayOS-FOCUS-0.5.0-debug.apk
           if-no-files-found: error
-          retention-days: 14        run: npx cap sync android
-
-      - name: Make Gradle executable
-        working-directory: ${{ steps.project.outputs.dir }}/android
-        run: chmod +x gradlew
-
-      - name: Build debug APK
-        working-directory: ${{ steps.project.outputs.dir }}/android
-        run: ./gradlew assembleDebug
-
-      - name: Verify APK
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
-
-          if [ -z "$APK" ]; then
-            echo "APK was not created"
-            exit 1
-          fi
-
-          echo "APK created:"
-          ls -lh "$APK"
-
-          mkdir -p release
-          cp "$APK" release/ShayOS-FOCUS-0.5.0-debug.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: shayos-focus-android-apk
-          path: ${{ steps.project.outputs.dir }}/release/ShayOS-FOCUS-0.5.0-debug.apk
-          if-no-files-found: error
           retention-days: 14
