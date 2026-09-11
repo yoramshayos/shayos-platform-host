@@ -1,0 +1,115 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "shayos-platform-host-source-0.5.0.tar.gz"
+      - ".github/workflows/android-apk.yml"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract ShayOS Platform Host
+        run: |
+          mkdir -p build
+          tar -xzf shayos-platform-host-source-0.5.0.tar.gz -C build
+          echo "Extracted contents:"
+          find build -maxdepth 3 -type f | sort | head -200
+
+      - name: Locate project directory
+        id: project
+        shell: bash
+        run: |
+          PACKAGE_JSON=$(find build -name package.json -type f | head -1)
+
+          if [ -z "$PACKAGE_JSON" ]; then
+            echo "package.json not found after extraction"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
+
+          echo "Project directory: $PROJECT_DIR"
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Install npm dependencies
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: npm install
+
+      - name: Verify source
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: npm run verify
+
+      - name: Configure FOCUS profile
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: npm run profile:focus
+
+      - name: Add Android platform
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      - name: Configure Android native project
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: npm run native:android
+
+      - name: Sync Capacitor Android
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: npx cap sync android
+
+      - name: Make Gradle executable
+        working-directory: ${{ steps.project.outputs.dir }}/android
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        working-directory: ${{ steps.project.outputs.dir }}/android
+        run: ./gradlew assembleDebug
+
+      - name: Verify APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
+
+          if [ -z "$APK" ]; then
+            echo "APK was not created"
+            exit 1
+          fi
+
+          echo "APK created:"
+          ls -lh "$APK"
+
+          mkdir -p release
+          cp "$APK" release/ShayOS-FOCUS-0.5.0-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shayos-focus-android-apk
+          path: ${{ steps.project.outputs.dir }}/release/ShayOS-FOCUS-0.5.0-debug.apk
+          if-no-files-found: error
+          retention-days: 14
