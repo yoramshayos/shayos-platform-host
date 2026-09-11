@@ -34,8 +34,7 @@ jobs:
       - name: Extract ShayOS Platform Host
         shell: bash
         run: |
-          ARCHIVE=$(find . -name "shayos-platform-host-source-0.5.0.tar.gz" -type f | head -1)
-
+          ARCHIVE=$(find . -name "shayos-platform-host-source-*.tar*.gz" -type f | head -1)
           if [ -z "$ARCHIVE" ]; then
             echo "Archive not found"
             echo "Repository contents:"
