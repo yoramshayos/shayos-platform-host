@@ -72,6 +72,10 @@ jobs:
         working-directory: ${{ steps.project.outputs.dir }}
         run: npm install --no-audit --no-fund
 
+      - name: Install TypeScript
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: npm install --no-save typescript
+      
       - name: Verify source
         working-directory: ${{ steps.project.outputs.dir }}
         run: npm run verify
