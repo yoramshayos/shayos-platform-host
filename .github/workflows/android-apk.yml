@@ -27,7 +27,13 @@ jobs:
           java-version: "21"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install Android platform tools
+        shell: bash
+        run: sdkmanager "platform-tools"
 
       - name: Locate source archive
         id: archive
@@ -75,7 +81,7 @@ jobs:
       - name: Install TypeScript
         working-directory: ${{ steps.project.outputs.dir }}
         run: npm install --no-save typescript
-      
+
       - name: Verify source
         working-directory: ${{ steps.project.outputs.dir }}
         run: npm run verify
